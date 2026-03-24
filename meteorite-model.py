@@ -72,6 +72,9 @@ df = df.dropna(subset=["reclat", "reclong"], how="all")
 print(f"\n=== After Basic Cleaning: {df.shape} ===")
 print(f"Missing values:\n{df.isnull().sum()}\n")
 
+#Drops rows where both lat and long are zero (invalid coordinates)
+df = df[~((df["reclat"] == 0) & (df["reclong"] == 0))]
+
 # ── 3. FEATURE DEFINITIONS ────────────────────────────────────────────────────
 
 NUMERIC_FEATURES = ["log_mass_g", "year", "reclat", "reclong"]
