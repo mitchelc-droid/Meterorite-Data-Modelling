@@ -32,6 +32,12 @@ from sklearn.metrics import (
     confusion_matrix,
 )
 
+from collections import Counter
+from imblearn.over_sampling import SMOTE
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.pipeline import Pipeline as ImbPipeline
+
+
 # ── 1. LOAD ───────────────────────────────────────────────────────────────────
 
 import kagglehub
@@ -48,7 +54,7 @@ print(f"Loading: {csv_path}\n")
 df = pd.read_csv(csv_path)
 
 print("=== Raw Data ===")
-print(df.shape) #45716 rows and 10 columns
+print(df.shape)
 print(df.dtypes)
 print(df.head(3))
 
@@ -82,7 +88,7 @@ df = df.dropna(subset=["reclat", "reclong"], how="all")
 print(f"\n=== After Basic Cleaning: {df.shape} ===")
 print(f"Missing values:\n{df.isnull().sum()}\n")
 
-#Drops rows where both lat and long are zero (invalid coordinates)
+# Drops rows where both lat and long are zero (invalid coordinates)
 df = df[~((df["reclat"] == 0) & (df["reclong"] == 0))]
 
 # ── 3. FEATURE DEFINITIONS ────────────────────────────────────────────────────
@@ -153,14 +159,32 @@ print(f"X_test  shape : {X_test_proc.shape}")
 print(f"Total features: {len(feature_names)}")
 print(f"\nSample feature names: {feature_names[:8]} ...")
 
-# ── 7. LOGISTIC REGRESSION MODEL ─────────────────────────────────────────────
+# ── 7. COMBINED RESAMPLING (SMOTE + RANDOM UNDERSAMPLING) ────────────────────
+
+oversample  = SMOTE(sampling_strategy=0.5, random_state=42)
+undersample = RandomUnderSampler(sampling_strategy=1.0, random_state=42)
+
+imb_pipeline = ImbPipeline([
+    ("oversample",  oversample),
+    ("undersample", undersample),
+])
+
+X_train_res, y_train_res = imb_pipeline.fit_resample(X_train_proc, y_train)
+
+print("=== After Combined Resampling ===")
+print(f"Original training set shape : {X_train_proc.shape}")
+print(f"Resampled training set shape: {X_train_res.shape}")
+print(f"Original class distribution : {Counter(y_train)}")
+print(f"Resampled class distribution: {Counter(y_train_res)}")
+
+# ── 8. LOGISTIC REGRESSION MODEL ─────────────────────────────────────────────
 
 model = LogisticRegression(max_iter=1000, random_state=42)
-model.fit(X_train_proc, y_train)
+model.fit(X_train_res, y_train_res)
 
 y_pred = model.predict(X_test_proc)
 
-# ── 8. EVALUATION ─────────────────────────────────────────────────────────────
+# ── 9. EVALUATION ─────────────────────────────────────────────────────────────
 
 accuracy  = accuracy_score(y_test, y_pred)
 precision = precision_score(y_test, y_pred, zero_division=0)
@@ -181,7 +205,7 @@ cm = confusion_matrix(y_test, y_pred)
 cm_df = pd.DataFrame(cm, index=le.classes_, columns=le.classes_)
 print(cm_df)
 
-# ── 9. TOP COEFFICIENTS ───────────────────────────────────────────────────────
+# ── 10. TOP COEFFICIENTS ──────────────────────────────────────────────────────
 
 coef_df = pd.DataFrame({
     "feature":     feature_names,
@@ -190,12 +214,3 @@ coef_df = pd.DataFrame({
 
 print("\n=== Top 10 Most Influential Features ===")
 print(coef_df.head(10).to_string(index=False))
-
-# ── 10. OPTIONAL — SAVE PROCESSED ARRAYS ─────────────────────────────────────
-
-out_dir = "preprocessed"
-os.makedirs(out_dir, exist_ok=True)
-pd.DataFrame(X_train_proc, columns=feature_names).to_csv(f"{out_dir}/X_train.csv", index=False)
-pd.DataFrame(X_test_proc,  columns=feature_names).to_csv(f"{out_dir}/X_test.csv",  index=False)
-pd.DataFrame({"y": y_train}).to_csv(f"{out_dir}/y_train.csv", index=False)
-pd.DataFrame({"y": y_test}).to_csv(f"{out_dir}/y_test.csv",   index=False)

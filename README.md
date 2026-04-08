@@ -16,7 +16,7 @@ This pipeline downloads the NASA Meteorite Landings dataset from Kaggle, cleans 
 Install dependencies before running:
 
 ```bash
-pip install kagglehub pandas numpy scikit-learn
+pip install kagglehub pandas numpy scikit-learn imbalanced-learn
 ```
 
 You will also need a Kaggle account with an API key configured. See [Kaggle API setup](https://www.kaggle.com/docs/api) for instructions.
