@@ -35,8 +35,12 @@ from sklearn.metrics import (
 
 from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import RandomUnderSampler
-from imblearn.pipeline import Pipeline as ImbPipeline
 
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+figure_dir = "figures"
+os.makedirs(figure_dir, exist_ok=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 1: LOAD DATA
@@ -101,6 +105,28 @@ df = df[~((df["reclat"] == 0) & (df["reclong"] == 0))]
 print(f"\n=== After Cleaning: {df.shape} ===")
 print(f"Missing values:\n{df.isnull().sum()}\n")
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISUALIZATION 1: CLASS DISTRIBUTION
+# Why imbalance handling is necessary.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class_counts = df["fall"].value_counts().reindex(["Fell", "Found"])
+
+plt.figure(figsize=(6, 4))
+bars = plt.bar(class_counts.index, class_counts.values, color=["#4C72B0", "#DD8452"])
+plt.title("Class Distribution: Fell vs Found")
+plt.xlabel("Meteorite Fall Status")
+plt.ylabel("Count")
+
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2, height + max(class_counts.values)*0.01,
+             f"{int(height):,}", ha="center", va="bottom", fontsize=10)
+
+plt.tight_layout()
+plt.savefig(f"{figure_dir}/class_distribution.png", dpi=300, bbox_inches="tight")
+plt.show()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 3: FEATURE DEFINITIONS
@@ -119,6 +145,110 @@ df["recclass"] = df["recclass"].where(df["recclass"].isin(top_classes), other="O
 NUMERIC_FEATURES     = ["log_mass_g", "year", "reclat", "reclong"]
 CATEGORICAL_FEATURES = ["recclass", "nametype"]   # "fall" is the target — excluded here
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISUALIZATION 2: MASS BEFORE VS AFTER LOG TRANSFORM
+# Why log_mass_g is a meaningful engineered feature.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+
+axes[0].hist(df["mass_g"].dropna(), bins=60, color="#DD8452", edgecolor="white")
+axes[0].set_title("Mass Before Log Transform")
+axes[0].set_xlabel("Mass (g)")
+axes[0].set_ylabel("Count")
+axes[0].ticklabel_format(style="sci", axis="x", scilimits=(0, 0))
+
+axes[1].hist(df["log_mass_g"].dropna(), bins=60, color="#4C72B0", edgecolor="white")
+axes[1].set_title("Mass After log1p Transform")
+axes[1].set_xlabel("log(mass_g + 1)")
+axes[1].set_ylabel("Count")
+
+plt.tight_layout()
+plt.savefig(f"{figure_dir}/mass_before_after_log.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISUALIZATION 3: LOG MASS BY FALL STATUS
+# Shows class separation in a modeled feature.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+fell_vals = df.loc[df["fall"] == "Fell", "log_mass_g"].dropna()
+found_vals = df.loc[df["fall"] == "Found", "log_mass_g"].dropna()
+
+plt.figure(figsize=(7, 5))
+box = plt.boxplot([fell_vals, found_vals], tick_labels=["Fell", "Found"], patch_artist=True)
+
+colors = ["#4C72B0", "#DD8452"]
+for patch, color in zip(box["boxes"], colors):
+    patch.set_facecolor(color)
+    patch.set_alpha(0.7)
+
+plt.title("Log-Transformed Mass by Fall Status")
+plt.xlabel("Fall Status")
+plt.ylabel("log(mass_g + 1)")
+plt.tight_layout()
+plt.savefig(f"{figure_dir}/boxplot_logmass_fell_found.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISUALIZATION 4: THREE GEOGRAPHIC SCATTER PLOTS
+# Found only, Fell only, and Combined
+# ═══════════════════════════════════════════════════════════════════════════════
+
+df_geo = df.dropna(subset=["reclat", "reclong", "fall"]).copy()
+
+fell_geo = df_geo[df_geo["fall"] == "Fell"]
+found_geo = df_geo[df_geo["fall"] == "Found"]
+
+fig, axes = plt.subplots(1, 3, figsize=(18, 5.5), sharex=True, sharey=True)
+
+# 1. Found only
+axes[0].scatter(
+    found_geo["reclong"], found_geo["reclat"],
+    s=8, alpha=0.35, color="red"
+)
+axes[0].set_title("Found Meteorites")
+axes[0].set_xlabel("Longitude")
+axes[0].set_ylabel("Latitude")
+axes[0].set_xlim(-180, 180)
+axes[0].set_ylim(-90, 90)
+axes[0].grid(alpha=0.2)
+
+# 2. Fell only
+axes[1].scatter(
+    fell_geo["reclong"], fell_geo["reclat"],
+    s=12, alpha=0.65, color="blue"
+)
+axes[1].set_title("Fell Meteorites")
+axes[1].set_xlabel("Longitude")
+axes[1].grid(alpha=0.2)
+
+# 3. Combined
+axes[2].scatter(
+    found_geo["reclong"], found_geo["reclat"],
+    s=8, alpha=0.25, color="red", label="Found"
+)
+axes[2].scatter(
+    fell_geo["reclong"], fell_geo["reclat"],
+    s=12, alpha=0.65, color="blue", label="Fell"
+)
+axes[2].set_title("Combined Geographic Distribution")
+axes[2].set_xlabel("Longitude")
+axes[2].grid(alpha=0.2)
+
+legend_elements = [
+    Line2D([0], [0], marker='o', color='w', label='Found',
+           markerfacecolor='red', markersize=7, alpha=0.9),
+    Line2D([0], [0], marker='o', color='w', label='Fell',
+           markerfacecolor='blue', markersize=7, alpha=0.9)
+]
+axes[2].legend(handles=legend_elements, loc="upper right")
+
+plt.suptitle("Geographic Distribution of Meteorite Records", fontsize=14, y=1.02)
+plt.tight_layout()
+plt.savefig(f"{figure_dir}/geographic_scatter_three_panel.png", dpi=300, bbox_inches="tight")
+plt.show()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 4: BUILD SKLEARN PIPELINES
@@ -309,6 +439,25 @@ coef_df = pd.DataFrame({
 }).sort_values("coefficient", key=abs, ascending=False)
 print(coef_df.head(10).to_string(index=False))
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISUALIZATION 5: LOGISTIC REGRESSION COEFFICIENTS
+# Positive coefficients push toward Found; negative toward Fell.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+top_coef = coef_df.head(10).copy().sort_values("coefficient")
+coef_colors = ["#4C72B0" if x < 0 else "#DD8452" for x in top_coef["coefficient"]]
+
+plt.figure(figsize=(10, 6))
+bars = plt.barh(top_coef["feature"], top_coef["coefficient"], color=coef_colors)
+plt.axvline(0, color="black", linewidth=1)
+plt.title("Top 10 Logistic Regression Coefficients")
+plt.xlabel("Coefficient Value")
+plt.ylabel("Feature")
+
+plt.tight_layout()
+plt.savefig(f"{figure_dir}/lr_top_coefficients.png", dpi=300, bbox_inches="tight")
+plt.show()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ██████████████████████████████████████████████████████████████████████████████
@@ -377,6 +526,36 @@ print(f"  Fell  predicted as Found : {cm_rf[0][1]}")
 print(f"  Found predicted as Fell  : {cm_rf[1][0]}")
 print(f"  Found predicted as Found : {cm_rf[1][1]}")
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISUALIZATION 6: SIDE-BY-SIDE CONFUSION MATRICES
+# Compares LR and RF behavior on Fell and Found.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+matrices = [
+    (cm_lr, "Logistic Regression Confusion Matrix", "Blues"),
+    (cm_rf, "Random Forest Confusion Matrix", "Greens")
+]
+
+for ax, (cm, title, cmap) in zip(axes, matrices):
+    im = ax.imshow(cm, cmap=cmap)
+    ax.set_title(title)
+    ax.set_xticks([0, 1])
+    ax.set_yticks([0, 1])
+    ax.set_xticklabels(le.classes_)
+    ax.set_yticklabels(le.classes_)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, f"{cm[i, j]}", ha="center", va="center", color="black", fontsize=11)
+
+plt.tight_layout()
+plt.savefig(f"{figure_dir}/confusion_matrices_lr_rf.png", dpi=300, bbox_inches="tight")
+plt.show()
+
 
 # ── Feature Importance — Model 2 ──────────────────────────────────────────────
 # Gini importance measures how much each feature reduces impurity across all
@@ -395,6 +574,37 @@ print(f"\n  → '{rf_imp_df.iloc[0]['feature']}' contributes "
 print(f"  → Top 4 features account for "
       f"{rf_imp_df.head(4)['importance'].sum()*100:.1f}% of total importance")
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISUALIZATION 7: RANDOM FOREST FEATURE IMPORTANCE
+# Shows which variables matter most for prediction.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+top_rf = rf_imp_df.head(10).copy().sort_values("importance", ascending=True)
+
+label_map = {
+    "log_mass_g": "Log Mass",
+    "year": "Year",
+    "reclat": "Latitude",
+    "reclong": "Longitude",
+    "nametype_Valid": "Name Type: Valid",
+    "nametype_Relict": "Name Type: Relict",
+}
+top_rf["pretty_feature"] = top_rf["feature"].map(label_map).fillna(top_rf["feature"])
+
+plt.figure(figsize=(10, 6))
+bars = plt.barh(top_rf["pretty_feature"], top_rf["importance"], color="#55A868")
+plt.title("Top 10 Random Forest Feature Importances")
+plt.xlabel("Gini Importance")
+plt.ylabel("Feature")
+
+for bar in bars:
+    width = bar.get_width()
+    plt.text(width + 0.002, bar.get_y() + bar.get_height()/2,
+             f"{width:.3f}", va="center", fontsize=9)
+
+plt.tight_layout()
+plt.savefig(f"{figure_dir}/rf_feature_importance_top10.png", dpi=300, bbox_inches="tight")
+plt.show()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 8: MODEL COMPARISON
@@ -437,11 +647,49 @@ print(comparison.to_string(float_format="{:.4f}".format))
 
 # Determine the better model based on overall accuracy
 best = "Random Forest" if rf_acc > lr_acc else "Logistic Regression"
-print(f"\n→ Best model by Accuracy    : {best}")
-print(f"→ Random Forest improved Fell Recall from "
-      f"{lr_fell_recall*100:.1f}% to {rf_fell_recall*100:.1f}%")
-print(f"  (Fell is the minority class — higher recall means fewer missed detections)")
 
+lr_fell_precision = precision_score(y_test, y_pred_lr, pos_label=0, zero_division=0)
+rf_fell_precision = precision_score(y_test, y_pred_rf, pos_label=0, zero_division=0)
+
+print(f"\n→ Best model by Accuracy    : {best}")
+print(f"→ Fell Recall: LR = {lr_fell_recall*100:.1f}% | RF = {rf_fell_recall*100:.1f}%")
+print(f"→ Fell Precision: LR = {lr_fell_precision*100:.1f}% | RF = {rf_fell_precision*100:.1f}%")
+print("→ Random Forest kept Fell recall high while greatly reducing false positives.")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISUALIZATION 8: MODEL METRIC COMPARISON
+# Compares overall performance and minority-class usefulness.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+lr_fell_precision = precision_score(y_test, y_pred_lr, pos_label=0, zero_division=0)
+rf_fell_precision = precision_score(y_test, y_pred_rf, pos_label=0, zero_division=0)
+
+metrics = ["Accuracy", "Found Recall", "Fell Recall", "Fell Precision", "ROC-AUC"]
+lr_scores = [lr_acc, lr_rec, lr_fell_recall, lr_fell_precision, lr_auc]
+rf_scores = [rf_acc, rf_rec, rf_fell_recall, rf_fell_precision, rf_auc]
+
+x = np.arange(len(metrics))
+width = 0.35
+
+plt.figure(figsize=(10, 5.5))
+bars1 = plt.bar(x - width/2, lr_scores, width, label="Logistic Regression", color="#4C72B0")
+bars2 = plt.bar(x + width/2, rf_scores, width, label="Random Forest", color="#55A868")
+
+plt.title("Model Performance Comparison")
+plt.ylabel("Score")
+plt.xticks(x, metrics, rotation=15)
+plt.ylim(0, 1.05)
+plt.legend()
+
+for bars in [bars1, bars2]:
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, height + 0.015,
+                 f"{height:.2f}", ha="center", va="bottom", fontsize=9)
+
+plt.tight_layout()
+plt.savefig(f"{figure_dir}/model_metric_comparison.png", dpi=300, bbox_inches="tight")
+plt.show()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 9: SAVE RESULTS

@@ -16,7 +16,7 @@ This pipeline downloads the NASA Meteorite Landings dataset from Kaggle, cleans 
 Install dependencies before running:
 
 ```bash
-pip install kagglehub pandas numpy scikit-learn
+pip install kagglehub pandas numpy scikit-learn matplotlib
 ```
 
 You will also need a Kaggle account with an API key configured. See [Kaggle API setup](https://www.kaggle.com/docs/api) for instructions.
@@ -26,7 +26,7 @@ You will also need a Kaggle account with an API key configured. See [Kaggle API 
 ## Usage
 
 ```bash
-python meteorite_preprocessing.py
+python meteorite-model.py
 ```
 
 The script will automatically download the dataset, preprocess it, train the model, and print evaluation results to the console.
@@ -41,24 +41,26 @@ The script will automatically download the dataset, preprocess it, train the mod
 
 ### Key Columns
 
-| Column | Description |
-|---|---|
-| `name` | Meteorite name |
-| `recclass` | Meteorite classification |
-| `mass (g)` | Mass in grams |
-| `fall` | Whether it was `Fell` (observed) or `Found` (discovered later) |
-| `year` | Year of fall or discovery |
-| `reclat` / `reclong` | Geographic coordinates |
-| `nametype` | Whether the entry is `Valid` or `Relict` |
+| Column               | Description                                                    |
+| -------------------- | -------------------------------------------------------------- |
+| `name`               | Meteorite name                                                 |
+| `recclass`           | Meteorite classification                                       |
+| `mass (g)`           | Mass in grams                                                  |
+| `fall`               | Whether it was `Fell` (observed) or `Found` (discovered later) |
+| `year`               | Year of fall or discovery                                      |
+| `reclat` / `reclong` | Geographic coordinates                                         |
+| `nametype`           | Whether the entry is `Valid` or `Relict`                       |
 
 ---
 
 ## Pipeline Steps
 
 ### 1. Load
+
 Downloads the dataset via `kagglehub` and auto-detects the CSV file.
 
 ### 2. Basic Cleaning
+
 - Removes duplicate rows
 - Standardises column names to lowercase with underscores
 - Filters years to valid range: **860–2016**
@@ -67,29 +69,36 @@ Downloads the dataset via `kagglehub` and auto-detects the CSV file.
 - Drops rows with placeholder coordinates **(0, 0)**
 
 ### 3. Feature Definitions
+
 - **Numeric features:** `log_mass_g`, `year`, `reclat`, `reclong`
 - **Categorical features:** `recclass`, `nametype`
 - **Target:** `fall` (Fell = 0, Found = 1)
 - Reduces `recclass` cardinality by keeping the top 30 classes and grouping the rest as `"Other"`
 
 ### 4. Sklearn Pipelines
+
 - **Numeric pipeline:** median imputation → standard scaling
 - **Categorical pipeline:** most-frequent imputation → one-hot encoding
 - Combined via `ColumnTransformer`
 
 ### 5. Train / Test Split
+
 - 80% train, 20% test
 - Stratified on the target variable to preserve class balance
 
 ### 6. Fit & Transform
+
 - Fits the preprocessor on training data only (prevents data leakage)
 - Transforms both train and test sets
 
 ### 7. Logistic Regression
+
 - Trained with `max_iter=1000` to ensure convergence
 
 ### 8. Evaluation
+
 Prints the following metrics to the console:
+
 - **Accuracy** — overall proportion of correct predictions
 - **Precision** — of predicted "Fell", how many were actually "Fell"
 - **Recall** — of actual "Fell", how many were correctly predicted
@@ -98,10 +107,13 @@ Prints the following metrics to the console:
 - **Confusion matrix** — predicted vs actual counts
 
 ### 9. Top Coefficients
+
 Displays the 10 features with the largest absolute logistic regression coefficients — these are the features most influential in predicting Fell vs Found.
 
 ### 10. Save Output
+
 Saves the processed arrays to a `preprocessed/` folder:
+
 - `X_train.csv`, `X_test.csv` — feature matrices with column names
 - `y_train.csv`, `y_test.csv` — encoded target labels
 
